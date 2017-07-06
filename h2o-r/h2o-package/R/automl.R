@@ -56,9 +56,10 @@ h2o.automl <- function(x, y, training_frame,
   },
   error = function(cond){
     message("
-         *********************************************************************\n
-         * Please verify that your H2O jar has the proper AutoML extensions. *\n
-         *********************************************************************\n
+         ******************************************************************************************\n
+         * Please verify that you have the AutoML extension!                                       \n
+         * Make sure the h2o-automl.jar is stored in h2o-ext directory (relative to your h2o.jar) *\n
+         ******************************************************************************************\n
          \nVerbose Error Message:")
     message(cond)
   })
