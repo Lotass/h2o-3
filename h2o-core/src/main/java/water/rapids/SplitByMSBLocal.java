@@ -4,6 +4,7 @@ import water.*;
 import water.fvec.Chunk;
 import water.util.ArrayUtils;
 import water.util.Log;
+import water.util.MathUtils;
 import water.util.PrettyPrint;
 
 import java.util.Arrays;
@@ -13,6 +14,7 @@ class SplitByMSBLocal extends MRTask<SplitByMSBLocal> {
   private final boolean _isLeft;
   private final int _shift, _batchSize, _bytesUsed[], _keySize;
   private final long _base[];
+  private final boolean _isNotDouble[];
   private final int  _col[];
   private final Key _linkTwoMRTask;
   private final int _id_maps[][];
@@ -23,13 +25,13 @@ class SplitByMSBLocal extends MRTask<SplitByMSBLocal> {
   private long _numRowsOnThisNode;
 
   static Hashtable<Key,SplitByMSBLocal> MOVESHASH = new Hashtable<>();
-  SplitByMSBLocal(boolean isLeft, long base[], int shift, int keySize, int batchSize, int bytesUsed[], int[] col, Key linkTwoMRTask, int[][] id_maps) {
+  SplitByMSBLocal(boolean isLeft, long base[], int shift, int keySize, int batchSize, int bytesUsed[], int[] col, Key linkTwoMRTask, int[][] id_maps, boolean[] isNotDouble) {
     _isLeft = isLeft;
     // we only currently use the shift (in bits) for the first column for the
     // MSB (which we don't know from bytesUsed[0]). Otherwise we use the
     // bytesUsed to write the key's bytes.
     _shift = shift;
-    _batchSize=batchSize; _bytesUsed=bytesUsed; _col=col; _base=base;
+    _batchSize=batchSize; _bytesUsed=bytesUsed; _col=col; _base=base; _isNotDouble=isNotDouble;
     _keySize = keySize;
     _linkTwoMRTask = linkTwoMRTask;
     _id_maps = id_maps;
@@ -73,7 +75,7 @@ class SplitByMSBLocal extends MRTask<SplitByMSBLocal> {
       _x[msb] = new byte[nbatch][];
       int b;
       for (b = 0; b < nbatch-1; b++) {
-        _o[msb][b] = new long[_batchSize];          // TO DO?: use MemoryManager.malloc8()
+        _o[msb][b] = new long[_batchSize];          // TODO?: use MemoryManager.malloc8()
         _x[msb][b] = new byte[_batchSize * _keySize];
       }
       _o[msb][b] = new long[lastSize];
@@ -125,7 +127,7 @@ class SplitByMSBLocal extends MRTask<SplitByMSBLocal> {
       int MSBvalue = 0;  // default for NA
       long thisx = 0;
       if (!chk[0].isNA(r)) {
-        thisx = chk[0].at8(r);
+        thisx = _isNotDouble[0]?chk[0].at8(r): MathUtils.convertDouble2Long(chk[0].atd(r));
         // TODO: restore branch-free again, go by column and retain original
         // compression with no .at8()
         if (_isLeft && _id_maps[0]!=null) thisx = _id_maps[0][(int)thisx] + 1;
@@ -149,7 +151,7 @@ class SplitByMSBLocal extends MRTask<SplitByMSBLocal> {
       for (int c=1; c<chk.length; c++) {  // TO DO: left align subsequent
         offset += _bytesUsed[c-1];     // advance offset by the previous field width
         if (chk[c].isNA(r)) continue;  // NA is a zero field so skip over as java initializes memory to 0 for us always
-        thisx = chk[c].at8(r);         // TODO : compress with a scale factor such as dates stored as ms since epoch / 3600000L
+        thisx = _isNotDouble[c]?chk[c].at8(r):MathUtils.convertDouble2Long(chk[c].atd(r));         // TODO : compress with a scale factor such as dates stored as ms since epoch / 3600000L
         if (_isLeft && _id_maps[c] != null) thisx = _id_maps[c][(int)thisx] + 1;
         else thisx = thisx - _base[c] + 1;
         for (int i = _bytesUsed[c] - 1; i >= 0; i--) {

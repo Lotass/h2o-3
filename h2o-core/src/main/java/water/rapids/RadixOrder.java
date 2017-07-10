@@ -5,6 +5,7 @@ import water.fvec.Frame;
 import water.fvec.Vec;
 import water.util.ArrayUtils;
 import water.util.Log;
+import water.util.MathUtils;
 
 
 // counted completer so that left and right index can run at the same time
@@ -15,6 +16,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
   final int _shift[];
   final int _bytesUsed[];
   final long _base[];
+  final boolean _isNotDouble[];   // record if a column is numeric
 
   RadixOrder(Frame DF, boolean isLeft, int whichCols[], int id_maps[][]) {
     _DF = DF;
@@ -24,6 +26,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     _shift = new int[_whichCols.length];   // currently only _shift[0] is used
     _bytesUsed = new int[_whichCols.length];
     _base = new long[_whichCols.length];
+    _isNotDouble = new boolean[_whichCols.length];
   }
 
   @Override
@@ -41,7 +44,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     System.out.println("Time to use rollup stats to determine biggestBit: " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     if( _whichCols.length > 0 )
-      new RadixCount(_isLeft, _base[0], _shift[0], _whichCols[0], _isLeft ? _id_maps : null ).doAll(_DF.vec(_whichCols[0]));
+      new RadixCount(_isLeft, _base[0], _shift[0], _whichCols[0], _isLeft ? _id_maps : null, _isNotDouble[0]).doAll(_DF.vec(_whichCols[0]));
     System.out.println("Time of MSB count MRTask left local on each node (no reduce): " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     // NOT TO DO:  we do need the full allocation of x[] and o[].  We need o[] anyway.  x[] will be compressed and dense.
@@ -55,7 +58,7 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
     // TODO: fix closeLocal() blocking issue and revert to simpler usage of closeLocal()
     Key linkTwoMRTask = Key.make();
     if( _whichCols.length > 0 )
-      new SplitByMSBLocal(_isLeft, _base, _shift[0], keySize, batchSize, _bytesUsed, _whichCols, linkTwoMRTask, _id_maps).doAll(_DF.vecs(_whichCols)); // postLocal needs DKV.put()
+      new SplitByMSBLocal(_isLeft, _base, _shift[0], keySize, batchSize, _bytesUsed, _whichCols, linkTwoMRTask, _id_maps, _isNotDouble).doAll(_DF.vecs(_whichCols)); // postLocal needs DKV.put()
     System.out.println("SplitByMSBLocal MRTask (all local per node, no network) took : " + ((t1=System.nanoTime()) - t0) / 1e9); t0=t1;
 
     if( _whichCols.length > 0 )
@@ -128,8 +131,15 @@ class RadixOrder extends H2O.H2OCountedCompleter<RadixOrder> {
           max = (long)col.max();
         }
       } else {
-        _base[i] = (long)col.min();
-        max = (long)col.max();
+        if (col.isInt()) {  // deal with integer columns
+          _isNotDouble[i] = true;
+          _base[i] = (long)col.min();
+          max = (long)col.max();
+        } else {  // deal with double columns
+          _isNotDouble[i] = false;    // column is not integer/long
+          _base[i] = MathUtils.convertDouble2Long(col.min());
+          max = MathUtils.convertDouble2Long(col.max());
+        }
       }
 
       // Compute the span or range between min and max.  Compute a

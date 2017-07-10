@@ -2,6 +2,7 @@ package water.rapids;
 
 import water.*;
 import water.fvec.Chunk;
+import water.util.MathUtils;
 
 class RadixCount extends MRTask<RadixCount> {
   static class Long2DArray extends Iced {
@@ -16,13 +17,15 @@ class RadixCount extends MRTask<RadixCount> {
   // before only an RTMP name anyway
   private final boolean _isLeft; 
   private final int _id_maps[][];
+  private final boolean _isNotDouble;
 
-  RadixCount(boolean isLeft, long base, int shift, int col, int id_maps[][]) {
+  RadixCount(boolean isLeft, long base, int shift, int col, int id_maps[][], boolean isNotDouble) {
     _isLeft = isLeft;
     _base = base;
     _col = col;
     _shift = shift;
     _id_maps = id_maps;
+    _isNotDouble = isNotDouble;
   }
 
   // make a unique deterministic key as a function of frame, column and node
@@ -46,7 +49,8 @@ class RadixCount extends MRTask<RadixCount> {
         // There are no NA in this join column; hence branch-free loop. Most
         // common case as should never really have NA in join columns.
         for (int r=0; r<chk._len; r++) {
-          tmp[(int)((chk.at8(r)-_base+1) >> _shift)]++;
+          long cellValue = _isNotDouble?chk.at8(r): MathUtils.convertDouble2Long(chk.atd(r));
+          tmp[(int)((cellValue-_base+1) >> _shift)]++;
           // TODO - use _mem directly.  Hist the compressed bytes and then shift
           // the histogram afterwards when reducing.
         }
@@ -55,7 +59,11 @@ class RadixCount extends MRTask<RadixCount> {
         // NA are present in join column
         for (int r=0; r<chk._len; r++) {
           if (chk.isNA(r)) tmp[0]++;
-          else tmp[(int)((chk.at8(r)-_base+1) >> _shift)]++;
+          else {
+            long cellValue = _isNotDouble?chk.at8(r): MathUtils.convertDouble2Long(chk.atd(r));
+            tmp[(int) ((cellValue - _base + 1) >> _shift)]++;
+          }
+
           // Done - we will join NA to NA as data.table does
           // TODO: allow NA-to-NA join to be turned off.  Do that in bmerge as a simple low-cost switch.
           // Note that NA and the minimum may well both be in MSB 0 but most of

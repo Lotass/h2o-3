@@ -169,6 +169,26 @@ public class MathUtils {
   public static double approxSqrt(double x) {
     return Double.longBitsToDouble(((Double.doubleToLongBits(x) >> 32) + 1072632448) << 31);
   }
+
+  /** Convert a double to long in order to use the integer sort already written for me.  It seems like the
+   * integer sort can also sort negative numbers.  However, when we consider doubles, I will use the bit twiddling
+   * from Michal Herf with the folllowing changes:
+   *
+   * 1. For the exponent, the mask should be 01111111111 and not all ones
+   * 2. We are not using unsigned integers.  Hence, I will set the sign bits of negative doubles to one and
+   *  leave the positive doubles alone.
+   *
+   * @param x double to be converted to long
+   * @return the long representation of x
+   */
+  public static long convertDouble2Long(double x) {
+   // long tempValue = Double.doubleToRawLongBits(x);
+    long tempValue = Double.doubleToLongBits(x);
+    long mask = ((tempValue>>>63)==0) ? 0x0l : 0xbfffffffffffffffl;
+    return (tempValue^mask);
+//    return(tempValue);
+  }
+
   /** Fast approximate sqrt
    *  @return sqrt(x) with up to 5% relative error */
   public static float approxSqrt(float x) {

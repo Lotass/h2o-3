@@ -6,6 +6,8 @@ import water.*;
 import water.fvec.*;
 import water.nbhm.NonBlockingHashMapLong;
 import water.rapids.vals.ValFrame;
+import water.util.ArrayUtils;
+import water.util.Log;
 
 import java.io.IOException;
 import java.util.Random;
@@ -189,7 +191,7 @@ public class SortTest extends TestUtil {
       sorted = fr.sort(new int[]{0});
       Scope.track(fr);
       Scope.track(sorted);
-      testSort(sorted, fr);
+      testSort(sorted, fr,0);
     } finally {
       Scope.exit();
     }
@@ -206,16 +208,52 @@ public class SortTest extends TestUtil {
       sorted = fr.sort(new int[]{0});
       Scope.track(fr);
       Scope.track(sorted);
-      testSort(sorted, fr);
+      testSort(sorted, fr,0);
     } finally {
       Scope.exit();
     }
   }
 
-  private static void testSort(Frame frSorted, Frame originalF) throws IOException {
+
+
+  /*
+    Test sorting of doubles that contains zeros, +/- infinities.
+   */
+  @Test public void TestSortSmallArray() throws IOException {
     Scope.enter();
-    Vec vec = frSorted.vec(0);
-    Vec vecO = originalF.vec(0);
+    Frame fr=null, sorted=null;
+    try { // single digit, >8 bits, >16 bits, >24 bits
+      fr = ArrayUtils.frame(ard(ard(1.1,257,65537, 16777219, 16777217),
+              ard(-1.1, 258, 65538, 16777218, -1152921504606846976l),
+              ard(0.1, 259, 65539, 16777217, 52921504606846976l)));
+
+      // 15, mantissa = 0.25 and exponent is 2
+      // 1.3e-3, mantissa is 0.13, exponent = -2
+      // 0.75, will get 0 01111111110 1000000... (
+
+      double negNum = -0.75;
+      double posNum = -0.5;
+      double zeros = 0.75;
+      double negNum1 = 0.5;
+
+      int[] colIndex = {0,1};
+      int actualIndex = 0;
+      sorted = fr.sort(colIndex);
+      Scope.track(fr);    // fr contains 1 column with 3 row values
+      Scope.track(sorted);
+      testSort(sorted, fr, colIndex[actualIndex]);
+    } finally {
+      Scope.exit();
+    }
+  }
+
+
+
+
+  private static void testSort(Frame frSorted, Frame originalF, int colIndex) throws IOException {
+    Scope.enter();
+    Vec vec = frSorted.vec(colIndex);
+    Vec vecO = originalF.vec(colIndex);
     Scope.track(vec);
     Scope.track(vecO);
     long naCnt = 0;   // make sure NAs are sorted at the beginning of frame
@@ -239,6 +277,10 @@ public class SortTest extends TestUtil {
       }
       for (int i = 1; i < len; i++) {
         if (!Double.isNaN(vec.at(i - 1)) && !Double.isNaN(vec.at(i)))
+          if (vec.at(i - 1) > vec.at(i)) {
+            Log.info("busted");
+
+          }
           assertTrue(vec.at(i - 1) <= vec.at(i));
       }
     } finally {
