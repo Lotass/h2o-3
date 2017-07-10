@@ -32,9 +32,11 @@
 #' \donttest{
 #' library(h2o)
 #' h2o.init()
-#' votes_path <- system.file("extdata", "housevotes.csv", package="h2o")
-#' votes_hf <- h2o.uploadFile(path = votes_path, header = TRUE)
-#' aml <- h2o.automl(y = "Class", training_frame = votes_hf, max_runtime_secs = 30)
+#' if (h2o.automl.available()) {
+#'   votes_path <- system.file("extdata", "housevotes.csv", package="h2o")
+#'   votes_hf <- h2o.uploadFile(path = votes_path, header = TRUE)
+#'   aml <- h2o.automl(y = "Class", training_frame = votes_hf, max_runtime_secs = 30)
+#' }
 #' }
 #' @export
 h2o.automl <- function(x, y, training_frame,
@@ -57,7 +59,7 @@ h2o.automl <- function(x, y, training_frame,
   error = function(cond){
     message("
          ******************************************************************************************\n
-         * Please verify that you have the AutoML extension!                                       \n
+         * Please verify that you have the AutoML extension!                                      *\n
          * Make sure the h2o-automl.jar is stored in h2o-ext directory (relative to your h2o.jar) *\n
          ******************************************************************************************\n
          \nVerbose Error Message:")
@@ -211,3 +213,9 @@ predict.H2OAutoML <- function(object, newdata, ...) {
   h2o.getFrame(dest_key)
 }
 
+#' Ask the H2O server whether AutoML extension is available
+#' Returns True if a AutoML is available, False otherwise
+#' @export
+h2o.automl.available <- function() {
+  "AutoML" %in% h2o.list_core_extensions()
+}
